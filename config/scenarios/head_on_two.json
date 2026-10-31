@@ -1,0 +1,85 @@
+{
+  "name": "head_on_two",
+  "description": "2人が正面から対向してくる (1人目は経路上、2人目は少し左寄り)",
+  "course": {
+    "start_x": 0.0,
+    "goal_x": 10.0,
+    "y": 0.0,
+    "robot_start_offset": 1.0,
+    "goal_extension": 2.0
+  },
+  "termination": {
+    "timeout": 60.0,
+    "stop_on_collision": true
+  },
+  "evaluation": {
+    "personal_space": 1.2,
+    "intimate_space": 0.45
+  },
+  "humans": [
+    {
+      "enabled": true,
+      "pattern": "head_on",
+      "speed": 1.0,
+      "radius": 0.25,
+      "cross_x": 5.0,
+      "from_side": "left",
+      "lateral_start": 3.0,
+      "lateral_end": 3.0,
+      "angle_deg": 90.0,
+      "start_x": 12.0,
+      "lateral_offset": 0.0,
+      "travel_distance": 14.0,
+      "x": 5.0,
+      "y": 0.0,
+      "waypoints": [
+        [
+          8.0,
+          2.0
+        ],
+        [
+          4.0,
+          -1.0
+        ]
+      ],
+      "loop": false,
+      "trigger": "time",
+      "trigger_time": 0.0,
+      "trigger_robot_x": 0.0,
+      "encounter_offset": 0.0,
+      "reactive": false
+    },
+    {
+      "enabled": true,
+      "pattern": "head_on",
+      "speed": 1.2,
+      "radius": 0.25,
+      "cross_x": 5.0,
+      "from_side": "left",
+      "lateral_start": 3.0,
+      "lateral_end": 3.0,
+      "angle_deg": 90.0,
+      "start_x": 15.0,
+      "lateral_offset": 0.8,
+      "travel_distance": 14.0,
+      "x": 5.0,
+      "y": 0.0,
+      "waypoints": [
+        [
+          8.0,
+          2.0
+        ],
+        [
+          4.0,
+          -1.0
+        ]
+      ],
+      "loop": false,
+      "trigger": "time",
+      "trigger_time": 1.0,
+      "trigger_robot_x": 0.0,
+      "encounter_offset": 0.0,
+      "reactive": false
+    }
+  ]
+}

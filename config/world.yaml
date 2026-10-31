@@ -1,0 +1,11 @@
+# Evaluation corridor. The robot drives along +x; START/GOAL lines are
+# placed per scenario (course.start_x / course.goal_x) and moved at reset.
+# After editing, restart the stack (./scripts/stop.sh then ./scripts/start.sh).
+name: eval_world
+walls: true             # side walls (false = open floor)
+corridor_width: 8.0     # distance between the side walls [m]
+x_min: -6.0             # walls / floor extent along x [m]
+x_max: 30.0
+wall_thickness: 0.2
+wall_height: 1.0
+max_humans: 2           # number of human models spawned in Gazebo

@@ -1,0 +1,25 @@
+# Cylindrical differential-drive serving robot.
+# Used by BOTH the Gazebo world generator (DiffDrive limits, body size, LiDAR)
+# and the controllers / 2D simulator, so keep it as the single source of truth.
+# After editing, restart the stack (./scripts/stop.sh then ./scripts/start.sh).
+radius: 0.25            # footprint radius [m]
+height: 1.10            # [m]
+mass: 30.0              # [kg]
+max_v: 1.0              # max forward speed [m/s]
+min_v: 0.0              # 0 = no reversing
+max_w: 2.0              # max yaw rate [rad/s]
+max_acc: 1.0            # linear acceleration [m/s^2]
+max_dec: 1.5            # linear deceleration [m/s^2] (positive value)
+max_alpha: 3.0          # angular acceleration [rad/s^2]
+wheel_separation: 0.36  # [m]
+wheel_radius: 0.075     # [m]
+lidar:
+  z: 0.30               # mounting height [m] (sees the humans' legs)
+  x: 0.0                # forward offset from the robot centre [m]
+  samples: 360
+  min_angle: -3.14159
+  max_angle: 3.14159
+  range_min: 0.10
+  range_max: 12.0
+  rate: 10.0            # [Hz]
+  noise_std: 0.01       # [m]

@@ -1,0 +1,21 @@
+# 外部 ROS 2 ノードを制御器として使う例 (Gazebo バックエンド専用)
+#
+# 試行の開始時に command を実行し、終了時に SIGINT で止めます。
+# 外部ノードに求めるインターフェース:
+#   購読: /eval/path (nav_msgs/Path, transient local)   今回の直線経路
+#         /ground_truth/odom (nav_msgs/Odometry)         ロボットの真値 (world 座標)
+#         /scan (sensor_msgs/LaserScan)                   必要なら
+#         /humans/human_N/odom (nav_msgs/Odometry)        必要なら (真値)
+#   配信: /controller/cmd_vel (geometry_msgs/Twist)       評価サーバーが走行中だけ /cmd_vel に転送
+# 環境変数 EVAL_TRIAL_ID / EVAL_CONTROLLER_PARAMS (JSON) も渡されます。
+#
+# C++ のノードや Nav2 の controller_server もこの形で組み込めます
+# (ros2_ws/src にパッケージを置いて ./scripts/build.sh で再ビルド)。
+type: external
+name: example_external
+label: "サンプル: 外部 ROS 2 ノード (Python)"
+description: "別プロセスの ROS 2 ノードを制御器として使う例 (eval_core/ros/example_external_controller.py)。"
+command: "ros2 run eval_core example_external_controller --ros-args -p use_sim_time:=true"
+startup_time: 3.0
+params:
+  target_speed: 0.6

@@ -1,0 +1,81 @@
+# Robot evaluation environment
+#
+#   ./scripts/build.sh                 build the image
+#   ./scripts/start.sh                 start Gazebo (sim) + evaluation server (eval)
+#   open http://localhost:8080
+#
+# Options are environment variables (see scripts/start.sh --help):
+#   WEB_PORT=8080  ROS_DOMAIN_ID=87  EVAL_LIDAR=auto|gpu|virtual
+#
+name: robot_eval
+
+x-common: &common
+  image: robot-eval:jazzy
+  network_mode: host          # DDS + gz-transport between the containers
+  ipc: host                   # Fast DDS shared memory between the containers
+  restart: "no"
+  volumes:
+    - ./config:/workspace/config
+    - ./results:/workspace/results
+    - ./custom_controllers:/workspace/custom_controllers
+
+x-env: &env
+  ROS_DOMAIN_ID: ${ROS_DOMAIN_ID:-87}
+  ROS_AUTOMATIC_DISCOVERY_RANGE: ${ROS_AUTOMATIC_DISCOVERY_RANGE:-LOCALHOST}
+  GZ_PARTITION: ${GZ_PARTITION:-robot_eval}
+  EVAL_CONFIG_DIR: /workspace/config
+  EVAL_RESULTS_DIR: /workspace/results
+  EVAL_CUSTOM_CONTROLLER_DIR: /workspace/custom_controllers
+
+services:
+  # Gazebo server + ros_gz_bridge + LiDAR relay
+  sim:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    environment:
+      <<: *env
+    command: >
+      ros2 launch eval_gazebo sim.launch.py
+      lidar:=${EVAL_LIDAR:-auto}
+      verbosity:=${GZ_VERBOSITY:-2}
+
+  # local planner (controllers) + evaluation web server
+  eval:
+    <<: *common
+    environment:
+      <<: *env
+    depends_on:
+      - sim
+    command: >
+      ros2 launch eval_core eval.launch.py
+      port:=${WEB_PORT:-8080}
+      backends:=${EVAL_BACKENDS:-gazebo,sim2d}
+
+  # optional: Gazebo GUI client (X11).  ./scripts/start.sh --gui
+  gui:
+    <<: *common
+    profiles: ["gui"]
+    environment:
+      <<: *env
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+      - ./config:/workspace/config
+    command: gz sim -g -v 2
+
+  # optional: RViz2 (X11).  ./scripts/start.sh --rviz
+  rviz:
+    <<: *common
+    profiles: ["rviz"]
+    environment:
+      <<: *env
+      DISPLAY: ${DISPLAY:-:0}
+      QT_X11_NO_MITSHM: "1"
+    volumes:
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+    command: >
+      bash -c "ros2 run rviz2 rviz2 -d $$(ros2 pkg prefix eval_gazebo)/share/eval_gazebo/rviz/eval.rviz
+      --ros-args -p use_sim_time:=true"

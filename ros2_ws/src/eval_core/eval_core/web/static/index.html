@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Evaluation</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Ccircle cx=%228%22 cy=%228%22 r=%227%22 fill=%22%231f6feb%22/%3E%3Ccircle cx=%228%22 cy=%225.5%22 r=%221.6%22 fill=%22white%22/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/style.css">
+<script src="/vendor/plotly.min.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="logo" aria-hidden="true"></span>
+    <div>
+      <div class="title">ロボット評価環境</div>
+      <div class="subtitle">ROS 2 Jazzy · Gazebo Harmonic · 差動二輪 配膳ロボット</div>
+    </div>
+  </div>
+  <div class="pills" id="backendPills"></div>
+</header>
+
+<nav class="tabs" role="tablist">
+  <button class="tab active" data-tab="run" role="tab">実行</button>
+  <button class="tab" data-tab="results" role="tab">結果</button>
+  <button class="tab" data-tab="analysis" role="tab">解析</button>
+  <button class="tab" data-tab="controllers" role="tab">制御器</button>
+</nav>
+
+<main>
+<!-- ================================================================ RUN -->
+<section id="tab-run" class="tabpanel active">
+  <div class="run-grid">
+    <div class="col settings">
+      <div class="card">
+        <h2>シミュレータ</h2>
+        <div class="row">
+          <label>バックエンド
+            <select id="backendSel"></select>
+          </label>
+          <label id="simSpeedWrap">2D 速度
+            <select id="simSpeed">
+              <option value="1">実時間 ×1</option>
+              <option value="2">×2</option>
+              <option value="5">×5</option>
+              <option value="0" selected>最大</option>
+            </select>
+          </label>
+        </div>
+        <p class="hint" id="backendHint"></p>
+      </div>
+
+      <div class="card">
+        <h2>シナリオ</h2>
+        <div class="row">
+          <label class="grow">プリセット
+            <select id="presetSel"></select>
+          </label>
+          <button class="btn ghost" id="presetLoad">読込</button>
+        </div>
+        <div class="row">
+          <label class="grow">名前 <input id="scName" type="text"></label>
+        </div>
+        <label>説明 <input id="scDesc" type="text"></label>
+        <h3>コース (ロボットは +x 方向に一直線)</h3>
+        <div class="row">
+          <label>START x [m] <input data-k="course.start_x" type="number" step="0.5"></label>
+          <label>GOAL x [m] <input data-k="course.goal_x" type="number" step="0.5"></label>
+          <label>経路 y [m] <input data-k="course.y" type="number" step="0.1"></label>
+        </div>
+        <div class="row">
+          <label>開始位置 (START手前) [m] <input data-k="course.robot_start_offset" type="number" step="0.1" min="0"></label>
+          <label>GOAL 先の経路延長 [m] <input data-k="course.goal_extension" type="number" step="0.5" min="0.3"></label>
+        </div>
+        <h3>終了条件・評価</h3>
+        <div class="row">
+          <label>タイムアウト [s] <input data-k="termination.timeout" type="number" step="5" min="1"></label>
+          <label class="check"><input data-k="termination.stop_on_collision" type="checkbox"> 接触したら終了</label>
+        </div>
+        <div class="row">
+          <label>パーソナルスペース [m] <input data-k="evaluation.personal_space" type="number" step="0.05" min="0"></label>
+          <label>密接距離 [m] <input data-k="evaluation.intimate_space" type="number" step="0.05" min="0"></label>
+        </div>
+        <div class="row end">
+          <button class="btn ghost" id="presetDelete">プリセット削除</button>
+          <button class="btn" id="presetSave">プリセットとして保存</button>
+        </div>
+      </div>
+
+      <div id="humanCards"></div>
+
+      <div class="card">
+        <h2>認識・制御器</h2>
+        <div class="row">
+          <label class="grow">障害物の認識
+            <select id="perception"></select>
+          </label>
+        </div>
+        <div class="row">
+          <label class="check"><input id="usePrediction" type="checkbox" checked> 人の等速予測を使う</label>
+          <label>LiDAR点の膨張 [m] <input id="scanInflation" type="number" step="0.05" min="0" max="1" value="0.15"></label>
+        </div>
+        <h3>制御器 (複数選択で比較)</h3>
+        <div id="ctrlList" class="ctrl-list"></div>
+        <div class="row">
+          <label>繰り返し回数 <input id="repeats" type="number" min="1" max="100" value="1"></label>
+          <label class="grow">バッチ名 <input id="batchName" type="text" placeholder="例: crossing_compare"></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="col live">
+      <div class="card sticky">
+        <div class="live-head">
+          <h2>ライブビュー</h2>
+          <div class="actions">
+            <button class="btn primary" id="startBtn">評価開始</button>
+            <button class="btn danger" id="stopBtn">停止</button>
+          </div>
+        </div>
+        <div class="canvas-wrap"><canvas id="liveCanvas" width="900" height="420"></canvas></div>
+        <div class="legend">
+          <span><i class="sw robot"></i>ロボット</span>
+          <span><i class="sw h1"></i>人1</span>
+          <span><i class="sw h2"></i>人2</span>
+          <span><i class="sw traj"></i>予測軌道</span>
+          <label class="check small"><input id="showScan" type="checkbox" checked> LiDAR点</label>
+          <label class="check small"><input id="showCands" type="checkbox" checked> 候補軌道</label>
+        </div>
+        <div class="stats" id="liveStats"></div>
+        <div class="progress"><div id="progressBar"></div></div>
+        <div id="liveMsg" class="hint"></div>
+        <h3>直近の試行</h3>
+        <div class="table-wrap"><table class="tbl" id="recentTbl"></table></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================================================================ RESULTS -->
+<section id="tab-results" class="tabpanel">
+  <div class="card">
+    <div class="row between">
+      <h2>結果一覧</h2>
+      <div class="row">
+        <input id="resFilter" type="search" placeholder="絞り込み (制御器・シナリオ・バッチ名)">
+        <button class="btn ghost" id="resReload">更新</button>
+        <button class="btn" id="resToAnalysis">選択した試行を解析 →</button>
+      </div>
+    </div>
+    <p class="hint">試行をクリックすると詳細グラフを表示します。チェックした試行を「解析」タブで比較できます。</p>
+    <div id="batchList"></div>
+  </div>
+  <div class="card" id="runDetail" hidden>
+    <div class="row between">
+      <h2 id="runTitle">試行の詳細</h2>
+      <div class="row" id="runDownloads"></div>
+    </div>
+    <div class="metrics-grid" id="runMetrics"></div>
+    <div class="plot" id="plotTraj"></div>
+    <div class="plot" id="plotDist"></div>
+    <div class="plot" id="plotVel"></div>
+  </div>
+</section>
+
+<!-- ================================================================ ANALYSIS -->
+<section id="tab-analysis" class="tabpanel">
+  <div class="card">
+    <div class="row between">
+      <h2>解析・比較</h2>
+      <div class="row">
+        <label>グループ化
+          <select id="groupBy">
+            <option value="controller">制御器</option>
+            <option value="scenario">シナリオ</option>
+            <option value="controller_scenario">制御器 × シナリオ</option>
+            <option value="controller_perception">制御器 × 認識</option>
+          </select>
+        </label>
+        <button class="btn ghost" id="anaPng">比較グラフ PNG</button>
+        <button class="btn" id="anaExport">ZIP で出力 (CSV・PNG・HTML)</button>
+      </div>
+    </div>
+    <p class="hint" id="anaSel">「結果」タブで試行を選択してください。</p>
+    <div class="table-wrap"><table class="tbl" id="anaTable"></table></div>
+  </div>
+  <div class="card">
+    <h2>指標の比較 (平均 ± 標準偏差)</h2>
+    <div class="row">
+      <label class="grow">表示する指標
+        <select id="anaMetrics" multiple size="5"></select>
+      </label>
+    </div>
+    <p class="hint">Ctrl (Mac は ⌘) を押しながらクリックで複数選択。グラフ右上のカメラアイコンで PNG 保存できます。</p>
+    <div class="plot-grid" id="anaBars"></div>
+  </div>
+  <div class="card">
+    <h2>軌跡と人との距離 (選択試行の重ね描き)</h2>
+    <div class="plot" id="anaTraj"></div>
+    <div class="plot" id="anaDist"></div>
+    <div class="plot" id="anaSpeed"></div>
+  </div>
+</section>
+
+<!-- ================================================================ CONTROLLERS -->
+<section id="tab-controllers" class="tabpanel">
+  <div class="card">
+    <h2>制御器</h2>
+    <p class="hint" id="customDirHint"></p>
+    <div id="ctrlErrors"></div>
+    <div id="ctrlCards" class="ctrl-cards"></div>
+  </div>
+</section>
+</main>
+
+<div id="toast" class="toast" hidden></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

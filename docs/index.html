@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Robot Evaluation Environment</title>
+<style>
+:root{--bg:#f6f7fb;--panel:#fff;--ink:#1b2230;--muted:#5d6779;--line:#dde2ec;--accent:#1f6feb;--code:#0f1724;--code-ink:#e6edf6;--chip:#eef2f8;--ok:#1a9e5c;--warn:#c98a00;--bad:#d1453b;--sim:#e9f3ff;--eval:#effaf3;--opt:#f6f1ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0f141c;--panel:#161d28;--ink:#e5eaf2;--muted:#9aa5b8;--line:#2a3446;--accent:#5b9bff;--chip:#222c3b;--sim:#16263a;--eval:#15291f;--opt:#231d33}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.75 system-ui,-apple-system,"Segoe UI","Hiragino Sans","Noto Sans JP","Yu Gothic UI",sans-serif}
+a{color:var(--accent)}
+header{background:var(--panel);border-bottom:1px solid var(--line);padding:28px 24px 22px}
+header .inner,main{max-width:1180px;margin:0 auto}
+h1{margin:0 0 6px;font-size:26px}
+header p{margin:0;color:var(--muted)}
+.badges{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+.badge{background:var(--chip);border-radius:999px;padding:2px 12px;font-size:12.5px}
+.layout{display:grid;grid-template-columns:230px minmax(0,1fr);gap:28px;max-width:1180px;margin:0 auto;padding:24px}
+nav.toc{position:sticky;top:16px;align-self:start;font-size:13.5px}
+nav.toc a{display:block;color:var(--muted);text-decoration:none;padding:3px 0 3px 10px;border-left:2px solid var(--line)}
+nav.toc a:hover{color:var(--ink);border-left-color:var(--accent)}
+@media (max-width:900px){.layout{grid-template-columns:minmax(0,1fr)}nav.toc{position:static;columns:2}}
+section{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px 24px;margin-bottom:20px}
+h2{font-size:20px;margin:0 0 12px;padding-bottom:6px;border-bottom:1px solid var(--line)}
+h3{font-size:16px;margin:20px 0 8px}
+pre{background:var(--code);color:var(--code-ink);padding:12px 14px;border-radius:8px;overflow-x:auto;font:13px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;margin:8px 0 14px}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:var(--chip);padding:1px 5px;border-radius:4px}
+pre code{background:none;padding:0;color:inherit}
+table{border-collapse:collapse;width:100%;font-size:13.5px;margin:8px 0 14px}
+th,td{border:1px solid var(--line);padding:6px 9px;text-align:left;vertical-align:top}
+th{background:var(--chip)}
+.note{border-left:4px solid var(--accent);background:var(--chip);padding:8px 12px;border-radius:0 8px 8px 0;margin:10px 0}
+.warn{border-left-color:var(--warn)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}
+.card{border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.card h4{margin:0 0 4px}
+.card p{margin:0;color:var(--muted);font-size:13.5px}
+svg text{font-family:system-ui,"Hiragino Sans","Noto Sans JP",sans-serif}
+.diagram{width:100%;height:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+.small{font-size:13px;color:var(--muted)}
+ol li,ul li{margin:3px 0}
+.kbd{border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:12px}
+</style>
+</head>
+<body>
+<header><div class="inner">
+  <h1>ロボット評価環境 (Robot Evaluation Environment)</h1>
+  <p>差動二輪の円柱型配膳ロボットを ROS 2 / Gazebo 上で START ラインから GOAL ラインまで走らせ、人とのすれ違い・横切りに対する
+    移動時間と人との距離を、ブラウザだけで評価・解析するための Docker 環境です。</p>
+  <div class="badges">
+    <span class="badge">ROS 2 Jazzy</span><span class="badge">Gazebo Harmonic</span><span class="badge">Docker Compose</span>
+    <span class="badge">DWA / Pure Pursuit / MPC / MPPI / DWPP + 自作</span><span class="badge">Web UI (Starlette + Plotly)</span>
+  </div>
+</div></header>
+
+<div class="layout">
+<nav class="toc">
+  <a href="#overview">概要</a>
+  <a href="#architecture">構成図</a>
+  <a href="#flow">試行の流れ</a>
+  <a href="#requirements">動作環境</a>
+  <a href="#quickstart">実行方法</a>
+  <a href="#ui">画面の使い方</a>
+  <a href="#humans">人の動きの設定</a>
+  <a href="#controllers">制御器</a>
+  <a href="#custom">自作制御器の追加</a>
+  <a href="#perception">障害物の認識モード</a>
+  <a href="#metrics">評価指標</a>
+  <a href="#config">設定ファイル</a>
+  <a href="#ros">ROS インターフェース</a>
+  <a href="#sim2d">簡易2Dシミュレータ</a>
+  <a href="#troubleshooting">トラブルシューティング</a>
+  <a href="#files">ディレクトリ構成</a>
+</nav>
+
+<main>
+<!-- ============================================================== -->
+<section id="overview">
+  <h2>概要</h2>
+  <div class="grid2">
+    <div class="card"><h4>シミュレーション</h4><p>ROS 2 Jazzy + Gazebo Harmonic。円柱型の差動二輪ロボット (半径 0.25 m, 2D LiDAR) と、速度制御される人モデル 2 体 (数は設定可) を直線の通路に配置。</p></div>
+    <div class="card"><h4>コース</h4><p>START ライン → GOAL ラインの一直線。ライン位置はシナリオごとに設定でき、試行ごとに Gazebo 上でも移動します。</p></div>
+    <div class="card"><h4>人の動き</h4><p>横切る (交差角・出会い頭タイミング) / 対向 / 同方向 / 静止 / ウェイポイント。開始トリガーとロボット回避反応も設定可能。</p></div>
+    <div class="card"><h4>制御器</h4><p>DWA, Pure Pursuit (Regulated), MPC (非線形 MPC), MPPI, DWPP を共通インターフェースで実装。<code>custom_controllers/</code> に .py を置けば自作も選択可能。</p></div>
+    <div class="card"><h4>評価</h4><p>START→GOAL の移動時間、人との最小距離・クリアランス、パーソナルスペース侵入時間、TTC、接触回数、滑らかさ、計算時間など。</p></div>
+    <div class="card"><h4>ブラウザで完結</h4><p>評価の開始・停止、ライブ表示、結果一覧、複数試行の比較解析、グラフ (PNG)・CSV・HTML レポート出力まで Web UI から操作。</p></div>
+  </div>
+</section>
+
+<!-- ============================================================== -->
+<section id="architecture">
+  <h2>構成図</h2>
+  <svg class="diagram" viewBox="0 0 1240 700" role="img" aria-label="システム構成図">
+    <defs>
+      <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5d6779"/></marker>
+    </defs>
+    <rect x="10" y="10" width="1220" height="680" rx="14" fill="none" stroke="#9aa5b8" stroke-dasharray="6 5"/>
+    <text x="26" y="34" font-size="14" fill="#5d6779">ホスト PC (Linux / Docker Engine + Compose v2 / 任意で NVIDIA GPU)  —  コンテナは network_mode: host, ipc: host</text>
+
+    <!-- browser -->
+    <rect x="30" y="70" width="180" height="170" rx="10" fill="#fff8e6" stroke="#c98a00"/>
+    <text x="120" y="98" font-size="15" font-weight="700" text-anchor="middle" fill="#1b2230">ブラウザ</text>
+    <text x="120" y="120" font-size="12" text-anchor="middle" fill="#1b2230">localhost:8080</text>
+    <g font-size="12" fill="#1b2230">
+      <text x="44" y="148">・シナリオ / 人の設定</text>
+      <text x="44" y="168">・制御器の選択</text>
+      <text x="44" y="188">・ライブビュー (SSE)</text>
+      <text x="44" y="208">・結果 / 解析 / 出力</text>
+    </g>
+
+    <!-- eval container -->
+    <rect x="240" y="50" width="400" height="470" rx="12" fill="#effaf3" stroke="#1a9e5c"/>
+    <text x="256" y="76" font-size="15" font-weight="700" fill="#1a7a48">eval コンテナ</text>
+    <rect x="260" y="92" width="360" height="196" rx="9" fill="#fff" stroke="#1a9e5c"/>
+    <text x="276" y="116" font-size="14" font-weight="700" fill="#1b2230">eval_server (Starlette + uvicorn + rclpy)</text>
+    <g font-size="12" fill="#1b2230">
+      <text x="276" y="140">・Web UI / REST API / Server-Sent Events</text>
+      <text x="276" y="160">・試行オーケストレーション (TrialRunner・バッチ)</text>
+      <text x="276" y="180">・人の移動制御 (横切り / 対向 / …) → 速度指令</text>
+      <text x="276" y="200">・指令ゲート: 走行中だけ制御器出力を /cmd_vel へ</text>
+      <text x="276" y="220">・記録 20 Hz → 指標計算 → CSV / JSON 保存</text>
+      <text x="276" y="240">・グラフ・レポート生成 (matplotlib・別プロセス)</text>
+      <text x="276" y="260">・簡易2Dシミュレータ (ROS/Gazebo 不要モード)</text>
+    </g>
+    <rect x="260" y="330" width="360" height="100" rx="9" fill="#fff" stroke="#1a9e5c"/>
+    <text x="276" y="354" font-size="14" font-weight="700" fill="#1b2230">local_planner ノード (10 Hz)</text>
+    <g font-size="12" fill="#1b2230">
+      <text x="276" y="376">DWA / Pure Pursuit / MPC / MPPI / DWPP / 自作 .py</text>
+      <text x="276" y="396">認識: LiDAR点 / LiDAR+人追跡 / 真値</text>
+      <text x="276" y="416">出力: /controller/cmd_vel, 予測軌道 (debug)</text>
+    </g>
+    <rect x="260" y="446" width="360" height="58" rx="9" fill="#fff" stroke="#1a9e5c" stroke-dasharray="5 4"/>
+    <text x="276" y="469" font-size="13" font-weight="700" fill="#1b2230">外部制御器 (任意)</text>
+    <text x="276" y="490" font-size="12" fill="#1b2230">custom_controllers/*.yaml → 任意の ROS 2 ノード</text>
+
+    <!-- sim container -->
+    <rect x="820" y="50" width="400" height="470" rx="12" fill="#e9f3ff" stroke="#1f6feb"/>
+    <text x="836" y="76" font-size="15" font-weight="700" fill="#1f5fc4">sim コンテナ</text>
+    <rect x="840" y="92" width="170" height="212" rx="9" fill="#fff" stroke="#1f6feb"/>
+    <text x="852" y="114" font-size="14" font-weight="700" fill="#1b2230">ros_gz_bridge</text>
+    <g font-size="11.5" fill="#1b2230">
+      <text x="852" y="136">/clock</text>
+      <text x="852" y="154">/cmd_vel</text>
+      <text x="852" y="172">/ground_truth/odom</text>
+      <text x="852" y="190">/odom, /tf</text>
+      <text x="852" y="208">/humans/N/cmd_vel</text>
+      <text x="852" y="226">/humans/N/odom</text>
+      <text x="852" y="244">/scan_gz</text>
+      <text x="852" y="262">set_pose (service)</text>
+      <text x="852" y="288" fill="#1f5fc4">⇄ gz-transport</text>
+    </g>
+    <rect x="840" y="330" width="170" height="100" rx="9" fill="#fff" stroke="#1f6feb"/>
+    <text x="852" y="352" font-size="14" font-weight="700" fill="#1b2230">scan_relay</text>
+    <g font-size="11.5" fill="#1b2230">
+      <text x="852" y="374">gpu_lidar → /scan</text>
+      <text x="852" y="392">描画できない環境では</text>
+      <text x="852" y="410">仮想 LiDAR に自動切替</text>
+    </g>
+    <rect x="1025" y="92" width="180" height="412" rx="9" fill="#fff" stroke="#1f6feb"/>
+    <text x="1037" y="114" font-size="14" font-weight="700" fill="#1b2230">Gazebo Harmonic</text>
+    <g font-size="11.5" fill="#1b2230">
+      <text x="1037" y="134" fill="#5d6779">gz sim server (1 kHz)</text>
+      <text x="1037" y="160" font-weight="700">eval_robot</text>
+      <text x="1045" y="178">DiffDrive (加減速制限)</text>
+      <text x="1045" y="196">gpu_lidar (高さ 0.3 m)</text>
+      <text x="1045" y="214">OdometryPublisher</text>
+      <text x="1037" y="240" font-weight="700">human_1 … N</text>
+      <text x="1045" y="258">VelocityControl</text>
+      <text x="1045" y="276">OdometryPublisher</text>
+      <text x="1037" y="302" font-weight="700">コース</text>
+      <text x="1045" y="320">start_line / goal_line</text>
+      <text x="1045" y="338">walls / 1 m グリッド</text>
+      <text x="1037" y="364" font-weight="700">UserCommands</text>
+      <text x="1045" y="382">set_pose でリセット</text>
+      <text x="1037" y="420" fill="#5d6779">world SDF は</text>
+      <text x="1037" y="438" fill="#5d6779">config/robot.yaml</text>
+      <text x="1037" y="456" fill="#5d6779">config/world.yaml から</text>
+      <text x="1037" y="474" fill="#5d6779">起動時に自動生成</text>
+    </g>
+
+    <!-- optional gui / rviz -->
+    <rect x="820" y="545" width="195" height="62" rx="9" fill="#f6f1ff" stroke="#7a5bd6" stroke-dasharray="5 4"/>
+    <text x="917" y="570" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2230">gui (任意)</text>
+    <text x="917" y="590" font-size="12" text-anchor="middle" fill="#1b2230">Gazebo GUI (X11)</text>
+    <rect x="1025" y="545" width="195" height="62" rx="9" fill="#f6f1ff" stroke="#7a5bd6" stroke-dasharray="5 4"/>
+    <text x="1122" y="570" font-size="13" font-weight="700" text-anchor="middle" fill="#1b2230">rviz (任意)</text>
+    <text x="1122" y="590" font-size="12" text-anchor="middle" fill="#1b2230">RViz2 (X11)</text>
+
+    <!-- volumes -->
+    <rect x="30" y="545" width="770" height="120" rx="10" fill="#f3f4f7" stroke="#9aa5b8"/>
+    <text x="46" y="571" font-size="14" font-weight="700" fill="#1b2230">ボリューム (リポジトリのディレクトリをコンテナにマウント)</text>
+    <g font-size="12.5" fill="#1b2230">
+      <text x="46" y="596">config/ … robot.yaml (寸法・速度/加速度制限・LiDAR), world.yaml (通路・人数), scenarios/*.json</text>
+      <text x="46" y="620">custom_controllers/ … 自作制御器 (.py / .yaml)。再起動なしで反映</text>
+      <text x="46" y="644">results/ … バッチ / 試行ごとの timeseries.csv, summary.json, config.json</text>
+    </g>
+
+    <!-- flows -->
+    <g stroke="#5d6779" stroke-width="2" fill="none">
+      <line x1="212" y1="150" x2="258" y2="150" marker-start="url(#ar)" marker-end="url(#ar)"/>
+      <line x1="622" y1="128" x2="838" y2="128" marker-end="url(#ar)"/>
+      <line x1="622" y1="178" x2="838" y2="178" marker-end="url(#ar)"/>
+      <line x1="838" y1="236" x2="622" y2="236" marker-end="url(#ar)"/>
+      <line x1="838" y1="292" x2="622" y2="352" marker-end="url(#ar)"/>
+      <line x1="838" y1="396" x2="622" y2="396" marker-end="url(#ar)"/>
+      <line x1="440" y1="290" x2="440" y2="328" marker-start="url(#ar)" marker-end="url(#ar)"/>
+      <line x1="925" y1="306" x2="925" y2="328" marker-end="url(#ar)"/>
+      <line x1="1012" y1="200" x2="1023" y2="200" marker-start="url(#ar)" marker-end="url(#ar)"/>
+      <line x1="440" y1="543" x2="440" y2="522" marker-end="url(#ar)"/>
+      <line x1="780" y1="543" x2="850" y2="522" marker-end="url(#ar)"/>
+    </g>
+    <g font-size="11" fill="#5d6779">
+      <text x="214" y="142">HTTP</text>
+      <text x="646" y="121">/cmd_vel, /humans/N/cmd_vel</text>
+      <text x="646" y="171">set_pose (シーンのリセット)</text>
+      <text x="646" y="229">/clock, 真値 odom (ロボット・人)</text>
+      <text x="706" y="342">/clock, 真値 odom</text>
+      <text x="700" y="389">/scan</text>
+      <text x="300" y="313" text-anchor="start">command ↓</text>
+      <text x="450" y="313">cmd_vel・status・debug ↑</text>
+      <text x="932" y="322">/scan_gz</text>
+    </g>
+  </svg>
+  <p class="small">sim と eval は同じイメージ (<code>robot-eval:jazzy</code>) から起動する別コンテナで、ホストネットワーク + 共有メモリで DDS / gz-transport 通信します。
+    既定で <code>ROS_DOMAIN_ID=87</code>, <code>ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST</code>, <code>GZ_PARTITION=robot_eval</code> とし、同じ LAN 上の実機ロボット等と干渉しないようにしています。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="flow">
+  <h2>試行の流れ</h2>
+  <svg class="diagram" viewBox="0 0 1120 170" role="img" aria-label="試行の状態遷移">
+    <defs><marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#5d6779"/></marker></defs>
+    <g font-size="13" text-anchor="middle">
+      <rect x="10" y="40" width="140" height="62" rx="10" fill="#eef2f8" stroke="#9aa5b8"/><text x="80" y="66" font-weight="700">停止</text><text x="80" y="86" font-size="11.5">指令0・制御器停止</text>
+      <rect x="180" y="40" width="140" height="62" rx="10" fill="#eef2f8" stroke="#9aa5b8"/><text x="250" y="66" font-weight="700">リセット</text><text x="250" y="86" font-size="11.5">set_pose で再配置</text>
+      <rect x="350" y="40" width="140" height="62" rx="10" fill="#eef2f8" stroke="#9aa5b8"/><text x="420" y="66" font-weight="700">待機</text><text x="420" y="86" font-size="11.5">静定・位置確認</text>
+      <rect x="520" y="40" width="140" height="62" rx="10" fill="#eef2f8" stroke="#9aa5b8"/><text x="590" y="66" font-weight="700">制御器起動</text><text x="590" y="86" font-size="11.5">経路と設定を送信</text>
+      <rect x="690" y="40" width="190" height="62" rx="10" fill="#e8f6ee" stroke="#1a9e5c"/><text x="785" y="62" font-weight="700">走行</text><text x="785" y="80" font-size="11.5">記録20Hz・人の移動・ゲート</text><text x="785" y="96" font-size="11.5">GOAL/接触/タイムアウト判定</text>
+      <rect x="910" y="40" width="190" height="62" rx="10" fill="#eef2f8" stroke="#9aa5b8"/><text x="1005" y="66" font-weight="700">終了・保存</text><text x="1005" y="86" font-size="11.5">指標計算→CSV/JSON</text>
+    </g>
+    <g stroke="#5d6779" stroke-width="2" marker-end="url(#ar2)"><line x1="150" y1="71" x2="178" y2="71"/><line x1="320" y1="71" x2="348" y2="71"/><line x1="490" y1="71" x2="518" y2="71"/><line x1="660" y1="71" x2="688" y2="71"/><line x1="880" y1="71" x2="908" y2="71"/></g>
+    <path d="M1005 102 C1005 150, 80 150, 80 104" fill="none" stroke="#5d6779" stroke-width="1.5" stroke-dasharray="5 4" marker-end="url(#ar2)"/>
+    <text x="560" y="160" font-size="12" text-anchor="middle" fill="#5d6779">次の試行へ (制御器 × シナリオ × 繰り返し回数 のバッチを順番に実行)</text>
+  </svg>
+  <p>時刻はすべてシミュレーション時刻 (<code>/clock</code>) です。<b>移動時間</b>はロボット中心が START ラインを通過した時刻から GOAL ラインを通過した時刻までを線形補間で求めます
+    (ロボットは START の手前 <code>robot_start_offset</code> から発進し、経路は GOAL の先まで延長しているので、ライン通過時は巡航中)。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="requirements">
+  <h2>動作環境</h2>
+  <table>
+    <tr><th>項目</th><th>内容</th></tr>
+    <tr><td>OS</td><td>Linux (Ubuntu 22.04 / 24.04 で想定)。<code>network_mode: host</code> を使うため Docker Desktop (Mac/Windows) は非推奨</td></tr>
+    <tr><td>Docker</td><td>Docker Engine 24 以降 + Docker Compose v2 (<code>docker compose</code>)</td></tr>
+    <tr><td>GPU (任意)</td><td>NVIDIA GPU + NVIDIA Container Toolkit で <code>--gpu</code>。無い場合は Mesa のソフトウェアレンダリング、さらにダメなら仮想 LiDAR に自動切替</td></tr>
+    <tr><td>GUI (任意)</td><td>Gazebo GUI / RViz2 を出す場合は X11 (Wayland なら XWayland)</td></tr>
+    <tr><td>ディスク</td><td>イメージ約 4〜5 GB (ROS 2 Jazzy + Gazebo Harmonic + RViz2)</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================== -->
+<section id="quickstart">
+  <h2>実行方法</h2>
+  <h3>1. 取得とビルド (初回のみ・十数分)</h3>
+<pre><code>git clone https://github.com/mamoru1126/robot_evaluation_environment.git
+cd robot_evaluation_environment
+./scripts/build.sh</code></pre>
+  <h3>2. 起動</h3>
+<pre><code>./scripts/start.sh</code></pre>
+  <p>NVIDIA GPU を使う場合 / Gazebo の GUI も出す場合:</p>
+<pre><code>./scripts/start.sh --gpu
+./scripts/start.sh --gpu --gui</code></pre>
+  <p>ブラウザで <a href="http://localhost:8080">http://localhost:8080</a> を開きます。右上の <b>Gazebo: 待機</b> (緑) が表示されれば準備完了です
+    (Gazebo の起動直後は数十秒かかることがあります)。</p>
+  <h3>3. 評価する</h3>
+  <ol>
+    <li>「実行」タブでプリセット (例: <code>crossing_and_head_on</code>) を選び「読込」</li>
+    <li>人 1・人 2 の移動方法やタイミングを必要に応じて変更 (ライブビューに予定経路が破線で表示されます)</li>
+    <li>障害物の認識モードと、比較したい制御器にチェック。繰り返し回数を設定</li>
+    <li>「評価開始」。ライブビューでロボット・人・予測軌道を確認できます。「停止」で中断</li>
+    <li>「結果」タブで試行を選んで詳細グラフ、チェックして「解析」タブで比較・PNG/CSV/HTML 出力</li>
+  </ol>
+  <h3>その他のコマンド</h3>
+  <table>
+    <tr><th>コマンド</th><th>内容</th></tr>
+    <tr><td><code>./scripts/logs.sh</code></td><td>ログを表示 (<code>./scripts/logs.sh sim</code> のようにサービス指定も可)</td></tr>
+    <tr><td><code>./scripts/stop.sh</code></td><td>停止 (results/ は残ります)</td></tr>
+    <tr><td><code>./scripts/diagnose.sh</code></td><td>トピック・レート・サービスの状態を表示</td></tr>
+    <tr><td><code>./scripts/shell.sh</code></td><td>eval コンテナのシェル (ROS 2 環境読込済み)。<code>./scripts/shell.sh sim</code> で sim 側</td></tr>
+    <tr><td><code>./scripts/test.sh</code></td><td>単体テスト・結合テスト (Gazebo 不要) をコンテナ内で実行</td></tr>
+    <tr><td><code>./scripts/start.sh --2d-only</code></td><td>Gazebo を使わず簡易2Dシミュレータだけで起動</td></tr>
+    <tr><td><code>./scripts/start.sh --virtual-lidar</code></td><td>Gazebo の gpu_lidar を使わず仮想 LiDAR を使う</td></tr>
+    <tr><td><code>./scripts/start.sh --rviz</code></td><td>RViz2 も起動 (LiDAR, 経路, 予測軌道, 人)</td></tr>
+  </table>
+  <div class="note">設定ファイル (<code>config/robot.yaml</code>, <code>config/world.yaml</code>) を変えたら <code>./scripts/stop.sh</code> → <code>./scripts/start.sh</code> で再起動してください
+    (Gazebo のワールドは起動時に生成されます)。シナリオと自作制御器は再起動不要です。ROS 2 パッケージ (<code>ros2_ws/src</code>) を変更した場合は <code>./scripts/build.sh</code> で再ビルドします。</div>
+</section>
+
+<!-- ============================================================== -->
+<section id="ui">
+  <h2>画面の使い方</h2>
+  <h3>実行タブ</h3>
+  <ul>
+    <li><b>シミュレータ</b>: Gazebo (ROS 2) か簡易2Dシミュレータを選択。2D は速度 (実時間〜最大) を選べます</li>
+    <li><b>シナリオ</b>: プリセットの読込・保存・削除。START x / GOAL x / 経路の y、ロボットの開始位置 (START 手前の距離)、GOAL 先の経路延長、タイムアウト、接触したら終了するか、パーソナルスペース / 密接距離のしきい値</li>
+    <li><b>人 1 / 人 2</b>: 有効・無効、移動方法、歩行速度、半径、パターン別の位置パラメータ、歩き始めるトリガー、ロボットを避ける反応 (<a href="#humans">詳細</a>)</li>
+    <li><b>認識・制御器</b>: 障害物の認識モード、人の等速予測の有無、LiDAR 点の膨張半径、制御器 (複数選択で比較) と各パラメータ、繰り返し回数、バッチ名</li>
+    <li><b>ライブビュー</b>: 上から見た通路・START/GOAL・ロボット (青)・人 (橙/青)・軌跡・LiDAR 点・制御器の予測軌道 (緑) と候補軌道、最も近い人までの距離。状態・速度・クリアランス・計算時間・バッチ進捗</li>
+  </ul>
+  <h3>結果タブ</h3>
+  <p>バッチごとに試行の一覧 (結果・移動時間・最小距離・最小クリアランス・PS侵入時間・最小TTC・接触回数)。試行をクリックすると、全指標と軌跡 / 人との距離 / 速度のグラフ (Plotly, 拡大・PNG保存可)、
+    matplotlib の PNG ダウンロードが表示されます。チェックした試行は解析タブで比較できます。</p>
+  <h3>解析タブ</h3>
+  <p>選択した試行を <b>制御器 / シナリオ / 制御器×シナリオ / 制御器×認識</b> でグループ化し、平均 ± 標準偏差の表と棒グラフ (表示指標は選択可)、軌跡・クリアランス・速度の重ね描きを表示します。
+    「比較グラフ PNG」で論文向けの図、「ZIP で出力」で <code>summary.csv</code>, <code>groups.csv</code>, 試行ごとの時系列 CSV, 図 (PNG), <code>report.html</code> をまとめてダウンロードできます。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="humans">
+  <h2>人の動きの設定</h2>
+  <p>座標系: ロボットは <b>+x</b> 方向に走行。<b>左 = +y</b>、<b>右 = −y</b>。経路は y = <code>course.y</code> の直線です。</p>
+  <svg class="diagram" viewBox="0 0 1120 250" role="img" aria-label="人の移動パターン">
+    <defs><marker id="ar3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#e6550d"/></marker>
+      <marker id="ar4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#1f6feb"/></marker></defs>
+    <g font-size="12.5">
+      <!-- crossing -->
+      <rect x="10" y="10" width="265" height="230" rx="10" fill="none" stroke="#9aa5b8"/>
+      <text x="22" y="32" font-weight="700">横切る (crossing)</text>
+      <line x1="30" y1="140" x2="260" y2="140" stroke="#9aa5b8" stroke-dasharray="5 4"/>
+      <circle cx="55" cy="140" r="11" fill="#1f6feb"/><line x1="70" y1="140" x2="110" y2="140" stroke="#1f6feb" stroke-width="2" marker-end="url(#ar4)"/>
+      <line x1="170" y1="58" x2="170" y2="215" stroke="#e6550d" stroke-width="2" marker-end="url(#ar3)"/>
+      <circle cx="170" cy="58" r="10" fill="#e6550d"/>
+      <line x1="230" y1="70" x2="185" y2="200" stroke="#e6550d" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ar3)"/>
+      <text x="178" y="54">左から (+y)</text><text x="120" y="160" font-size="11">cross_x</text>
+      <text x="22" y="232" font-size="11">交差角 angle_deg (90=直角, &lt;90 同方向寄り, &gt;90 向かってくる)</text>
+      <!-- head-on -->
+      <rect x="290" y="10" width="265" height="230" rx="10" fill="none" stroke="#9aa5b8"/>
+      <text x="302" y="32" font-weight="700">対向 (head_on)</text>
+      <line x1="310" y1="140" x2="540" y2="140" stroke="#9aa5b8" stroke-dasharray="5 4"/>
+      <circle cx="335" cy="140" r="11" fill="#1f6feb"/><line x1="350" y1="140" x2="390" y2="140" stroke="#1f6feb" stroke-width="2" marker-end="url(#ar4)"/>
+      <circle cx="515" cy="122" r="10" fill="#e6550d"/><line x1="500" y1="122" x2="430" y2="122" stroke="#e6550d" stroke-width="2" marker-end="url(#ar3)"/>
+      <text x="430" y="110" font-size="11">start_x から −x へ</text><text x="440" y="160" font-size="11">lateral_offset: 経路からの横ずれ</text>
+      <!-- same direction -->
+      <rect x="570" y="10" width="265" height="230" rx="10" fill="none" stroke="#9aa5b8"/>
+      <text x="582" y="32" font-weight="700">同方向・追い越し (same_direction)</text>
+      <line x1="590" y1="140" x2="820" y2="140" stroke="#9aa5b8" stroke-dasharray="5 4"/>
+      <circle cx="615" cy="140" r="11" fill="#1f6feb"/><line x1="630" y1="140" x2="670" y2="140" stroke="#1f6feb" stroke-width="2" marker-end="url(#ar4)"/>
+      <circle cx="715" cy="140" r="10" fill="#e6550d"/><line x1="730" y1="140" x2="770" y2="140" stroke="#e6550d" stroke-width="2" marker-end="url(#ar3)"/>
+      <text x="670" y="170" font-size="11">遅い歩行者を追い越す</text>
+      <!-- static / waypoints -->
+      <rect x="850" y="10" width="260" height="230" rx="10" fill="none" stroke="#9aa5b8"/>
+      <text x="862" y="32" font-weight="700">静止 / ウェイポイント</text>
+      <line x1="870" y1="140" x2="1095" y2="140" stroke="#9aa5b8" stroke-dasharray="5 4"/>
+      <circle cx="895" cy="140" r="11" fill="#1f6feb"/>
+      <circle cx="990" cy="165" r="10" fill="#e6550d"/><text x="1004" y="180" font-size="11">static (x, y)</text>
+      <polyline points="1070,70 1010,95 1050,120 990,130" fill="none" stroke="#e6550d" stroke-width="2" marker-end="url(#ar3)"/>
+      <text x="972" y="62" font-size="11">waypoints [[x,y],…]</text>
+    </g>
+  </svg>
+  <table>
+    <tr><th>パラメータ</th><th>意味</th></tr>
+    <tr><td><code>speed</code>, <code>radius</code></td><td>歩行速度 [m/s]、評価用の人の半径 [m] (クリアランス = 中心間距離 − ロボット半径 − 人の半径)</td></tr>
+    <tr><td>crossing: <code>cross_x</code>, <code>from_side</code>, <code>lateral_start</code>, <code>lateral_end</code>, <code>angle_deg</code></td><td>経路を横切る x 位置、出発する側 (left=+y / right=−y)、開始時・終了時の経路からの横距離、交差角</td></tr>
+    <tr><td>head_on / same_direction: <code>start_x</code>, <code>lateral_offset</code>, <code>travel_distance</code></td><td>開始位置、経路からの横ずれ (+ で左)、歩く距離</td></tr>
+    <tr><td>static: <code>x</code>, <code>y</code> / waypoints: <code>waypoints</code>, <code>loop</code></td><td>立っている位置 / 経由点 (先頭が初期位置)、繰り返すか</td></tr>
+    <tr><td><code>trigger</code></td><td><b>time</b>: 試行開始から <code>trigger_time</code> 秒後に歩き出す。<b>robot_x</b>: ロボットが <code>trigger_robot_x</code> を越えたら。
+      <b>encounter</b> (横切り時): ロボットが現在の速度で進むと横切り地点に人と同時に到達するタイミングで歩き出す (<code>encounter_offset</code> 秒だけ人を遅らせる/早める)</td></tr>
+    <tr><td><code>reactive</code></td><td>ON にすると人がロボットを避ける (Social Force 風の反発)。OFF (既定) は決められた経路を歩き続ける「ロボットに気付かない人」で、最も厳しい条件になります</td></tr>
+  </table>
+  <p>Gazebo では人は VelocityControl システム (機体座標系の速度指令) で動かし、OdometryPublisher で真値を取得します。人の 3D モデルは脚・胴体・腕・頭で構成され、高さ 0.3 m の LiDAR には 2 本の脚が映ります。</p>
+  <h3>付属プリセット</h3>
+  <table>
+    <tr><th>名前</th><th>内容</th></tr>
+    <tr><td><code>crossing_and_head_on</code></td><td>人1 が左から出会い頭に横切り、人2 が正面 (横ずれ 0.3 m) から対向</td></tr>
+    <tr><td><code>crossing_both_sides</code></td><td>2 人が左右から順に横切る (どちらも出会い頭)</td></tr>
+    <tr><td><code>head_on_two</code></td><td>2 人が正面から対向 (人1 は経路上、人2 は左寄り・1 秒遅れ)</td></tr>
+    <tr><td><code>diagonal_crossing</code></td><td>斜めに横切る (向かってくる 120° と同方向 60°)</td></tr>
+    <tr><td><code>overtake_slow_walker</code></td><td>前方を 0.4 m/s で歩く人と、立ち止まっている人</td></tr>
+    <tr><td><code>no_humans</code></td><td>人なし (基準となる移動時間の計測用)</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================== -->
+<section id="controllers">
+  <h2>制御器</h2>
+  <p>すべて同じ入力 (ロボットの真値姿勢・速度、直線経路、障害物) を受け取り、10 Hz で (v, ω) を出力します。ロボットの物理的な速度・加速度制限は Gazebo の DiffDrive (と 2D シミュレータ) が同じ値で掛けます。
+    目標速度は既定でどれも 0.8 m/s です。</p>
+  <table>
+    <tr><th>制御器</th><th>方式</th><th>回避</th><th>主なパラメータ</th></tr>
+    <tr><td><b>DWA</b><br><code>dwa</code></td><td>Fox ら (1997) の Dynamic Window Approach。1 制御周期で到達可能な (v, ω) をサンプリングし、3 秒の等速円弧を経路の横ずれ・進捗・方位・障害物との近さ・速度で評価 (DWB 風の評価関数)。衝突する円弧は除外</td><td>する</td><td>sim_time, v/w_samples, w_path, w_goal, w_heading, w_obstacle, w_speed, safety_margin</td></tr>
+    <tr><td><b>Pure Pursuit</b><br><code>pure_pursuit</code></td><td>Nav2 Regulated Pure Pursuit 相当。速度比例の前方注視点への円弧曲率 κ = 2y/L²、曲率・障害物近接・ゴール接近による減速。前方円弧上に衝突が迫ると停止して待つ (Nav2 では NoValidControl)</td><td>しない (停止)</td><td>lookahead_time, min/max_lookahead, regulated_min_radius, cost_scaling_dist, collision_time</td></tr>
+    <tr><td><b>DWPP</b><br><code>dwpp</code></td><td>Dynamic Window Pure Pursuit (Ohnishi, arXiv:2601.15006)。Pure Pursuit の曲率直線 ω = κv に対し、速度・加速度制約の Dynamic Window 内で最も近い指令を選ぶ。Nav2 main の <code>dynamic_window_pure_pursuit_functions.hpp</code> を移植 (ROS 2 Jazzy の Nav2 には未収録)</td><td>しない (停止)</td><td>Pure Pursuit と同じ (加速度は robot.yaml)</td></tr>
+    <tr><td><b>MPC</b><br><code>mpc</code></td><td>非線形 MPC (シングルシューティング, scipy SLSQP, 解析勾配)。ユニサイクルモデルで 20 ステップ × 0.15 s を予測し、経路の横/縦誤差・方位・速度・制御変化と、人/障害物との安全距離のソフト制約を最小化。速度・加速度は制約として扱う。障害物が近いときは直進・右回避・左回避の 3 初期解から最適化</td><td>する</td><td>horizon_steps, dt, q_lateral, q_obstacle, safety_distance, multi_start, pass_side</td></tr>
+    <tr><td><b>MPPI</b><br><code>mppi</code></td><td>Model Predictive Path Integral (Williams ら)。時間相関ノイズを加えた 800 本の制御系列をロールアウトし、コストの指数重み付き平均で更新 (Nav2 MPPI 風のコスト)。左右対称な状況で回避方向がぶれないよう、すれ違う側の小さなバイアスあり</td><td>する</td><td>num_samples, horizon_steps, temperature, noise_v/w, noise_smoothing, w_*, pass_side</td></tr>
+  </table>
+  <div class="note warn">Pure Pursuit / DWPP は経路追従器なので人を避けません。「ロボットを避ける」が OFF の人が経路上に来ると、停止したロボットに人が接触して「接触」で終了することがあります。
+    これはアルゴリズムの性質どおりの結果です (人を反応させる、または接触しても続行する設定で比較できます)。</div>
+  <p>人の等速予測は、認識モードが <b>LiDAR + 人追跡</b> または <b>真値</b> のときに DWA / MPC / MPPI / Pure Pursuit 系の衝突判定で使われます (<a href="#perception">認識モード</a>)。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="custom">
+  <h2>自作制御器の追加</h2>
+  <h3>A. Python プラグイン (推奨・Gazebo / 2D 両対応)</h3>
+  <p><code>custom_controllers/</code> に <code>BaseController</code> を継承したクラスを書いた .py を置くだけです。Web UI の「制御器」タブで「再読込」すると一覧に出ます
+    (試行開始のたびに読み直すので、再ビルドも再起動も不要)。<code>PARAMS</code> に書いたパラメータは UI のフォームになります。</p>
+<pre><code>from eval_core.controllers.base import BaseController, ControlOutput, Param, rollout_constant
+
+
+class MyController(BaseController):
+    name = "my_controller"                 # 一意な名前
+    label = "My controller"                # UI 表示名
+    description = "説明"
+    PARAMS = {
+        "target_speed": Param(0.8, 0.1, 1.5, 0.05, "目標速度 [m/s]"),
+    }
+
+    def compute(self, inp):
+        st = inp.state                     # t, x, y, yaw, v, w (world 座標の真値)
+        s, lateral, _ = inp.path.project(st.x, st.y)
+        v = self.p["target_speed"]
+        w = -1.5 * lateral
+        # inp.obstacles.clearance(xy, tau): ロボット表面から障害物までの距離 (tau 秒後の予測)
+        # inp.obstacles.agents: 人 (x, y, vx, vy, radius)  ※追跡/真値モード
+        traj, _ = rollout_constant(st.x, st.y, st.yaw, v, w, 1.5, 0.1)
+        return ControlOutput(v, w, trajectory=traj.tolist())</code></pre>
+  <p>完全な例: <code>custom_controllers/example_stop_and_go.py</code>。入力は <code>inp.state</code>, <code>inp.path</code> (<code>project</code>, <code>lookahead_point</code>, <code>heading_at</code>, <code>remaining</code>),
+    <code>inp.obstacles</code>, <code>inp.dt</code>, <code>inp.last_cmd</code>。速度は robot.yaml の上限でクリップされ、Gazebo 側でも加減速制限が掛かります。</p>
+  <h3>B. 外部 ROS 2 ノード (C++ / Nav2 など・Gazebo のみ)</h3>
+  <p><code>custom_controllers/*.yaml</code> に起動コマンドを書くと、試行ごとにそのプロセスを起動・停止します。</p>
+<pre><code>type: external
+name: my_cpp_controller
+label: "My C++ controller"
+command: "ros2 run my_pkg my_node --ros-args -p use_sim_time:=true"
+startup_time: 3.0        # 起動を待つ秒数
+params: {}               # 環境変数 EVAL_CONTROLLER_PARAMS (JSON) で渡される</code></pre>
+  <table>
+    <tr><th>外部ノードのインターフェース</th><th>型</th></tr>
+    <tr><td>購読 <code>/eval/path</code> (transient local)</td><td>nav_msgs/Path — 今回の直線経路 (world)</td></tr>
+    <tr><td>購読 <code>/ground_truth/odom</code></td><td>nav_msgs/Odometry — ロボットの真値</td></tr>
+    <tr><td>購読 <code>/scan</code>, <code>/humans/human_N/odom</code> (任意)</td><td>sensor_msgs/LaserScan, nav_msgs/Odometry</td></tr>
+    <tr><td>配信 <code>/controller/cmd_vel</code></td><td>geometry_msgs/Twist — 走行中だけ <code>/cmd_vel</code> に転送</td></tr>
+  </table>
+  <p>例: <code>custom_controllers/example_external.yaml</code> (<code>eval_core/ros/example_external_controller.py</code>)。自作の ROS 2 パッケージは <code>ros2_ws/src</code> に置いて <code>./scripts/build.sh</code> で再ビルドします。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="perception">
+  <h2>障害物の認識モード</h2>
+  <table>
+    <tr><th>モード</th><th>制御器に渡るもの</th><th>用途</th></tr>
+    <tr><td><b>LiDAR 点群のみ</b> (<code>scan</code>)</td><td>/scan の点 (world 座標) を静止物として。人の脚も点として見える。点は「LiDAR点の膨張」半径だけ太らせる</td><td>地図なし・追跡なしのロボット</td></tr>
+    <tr><td><b>LiDAR + 人追跡</b> (<code>scan_tracking</code>, 既定)</td><td>点群をクラスタリングし、人サイズのクラスタを追跡 (α-β フィルタ) して位置・速度を推定。動いているものは予測付きの人、残りは静止点</td><td>現実的な脚追跡を持つロボット</td></tr>
+    <tr><td><b>真値</b> (<code>ground_truth</code>)</td><td>シミュレータの人の位置・速度 + 既知の壁</td><td>認識誤差を除いたアルゴリズム比較</td></tr>
+  </table>
+  <p>Gazebo の LiDAR は <code>gpu_lidar</code> (高さ 0.3 m, 360 点, 10 Hz, 12 m) です。OpenGL/EGL が使えない環境では <code>scan_relay</code> が真値から同じ形式の仮想 LiDAR を作ります (起動時のログに表示)。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="metrics">
+  <h2>評価指標</h2>
+  <table>
+    <tr><th>指標</th><th>定義</th></tr>
+    <tr><td>移動時間 START→GOAL [s]</td><td>ロボット中心が START ラインを通過した時刻から GOAL ラインを通過した時刻まで (サンプル間を線形補間)</td></tr>
+    <tr><td>試行開始から GOAL まで [s]</td><td>制御器が走り出した時刻から GOAL ライン通過まで</td></tr>
+    <tr><td>平均速度 / 最大速度 / 走行距離</td><td>(GOAL x − START x) / 移動時間、計測速度の最大値、START〜GOAL 間の軌跡長</td></tr>
+    <tr><td>最大横ずれ / 横ずれ RMS</td><td>START〜GOAL 間の経路 (y) からのずれ</td></tr>
+    <tr><td>人との最小距離 (中心間)</td><td>min ‖p<sub>robot</sub> − p<sub>human</sub>‖ (全試行時間・真値)</td></tr>
+    <tr><td>人との最小クリアランス (表面間)</td><td>中心間距離 − ロボット半径 − 人の半径。0 以下は接触</td></tr>
+    <tr><td>パーソナルスペース / 密接距離 侵入時間</td><td>いずれかの人との中心間距離がしきい値 (既定 1.2 m / 0.45 m, Hall の近接学) 未満だった時間</td></tr>
+    <tr><td>最小 TTC</td><td>ロボットと人が現在の速度のまま進んだ場合に接触するまでの時間の最小値 (上限 10 s)</td></tr>
+    <tr><td>接触回数</td><td>クリアランスが 0 以下になった回数。「接触したら終了」が ON なら 1 回目で試行終了 (結果 = 接触)</td></tr>
+    <tr><td>停止回数 / 停止時間 / 衝突回避のための停止時間</td><td>速度 0.05 m/s 未満が 0.5 s 以上続いた回数・合計時間、制御器が blocked を返していた時間</td></tr>
+    <tr><td>加速度 RMS / ジャーク RMS / 角加速度 RMS / 平均 |ω|</td><td>計測速度の差分から (START〜GOAL)</td></tr>
+    <tr><td>制御計算時間 平均 / 最大 [ms]</td><td>制御器 1 回の compute の処理時間</td></tr>
+    <tr><td>成功</td><td>GOAL に到達 かつ 接触 0 回</td></tr>
+  </table>
+  <p>試行ごとに <code>results/&lt;batch&gt;/&lt;run&gt;/</code> に <code>timeseries.csv</code> (20 Hz: t, x, y, yaw, v, w, cmd_v, cmd_w, compute_ms, blocked, 人ごとの x, y, vx, vy)、
+    <code>summary.json</code> (上記指標と人ごとの最小距離など)、<code>config.json</code> (制御器・パラメータ・シナリオ・ロボット仕様) が保存されます。</p>
+</section>
+
+<!-- ============================================================== -->
+<section id="config">
+  <h2>設定ファイル</h2>
+  <table>
+    <tr><th>ファイル</th><th>内容</th></tr>
+    <tr><td><code>config/robot.yaml</code></td><td>ロボット半径・高さ・質量、最大速度・角速度、加減速度、車輪間隔・半径、LiDAR (高さ・点数・範囲・周期・ノイズ)。Gazebo のモデルと DiffDrive の制限、制御器、2D シミュレータが同じ値を使います</td></tr>
+    <tr><td><code>config/world.yaml</code></td><td>通路の幅・長さ、壁の有無・高さ、人の数 (<code>max_humans</code>, 既定 2)</td></tr>
+    <tr><td><code>config/scenarios/*.json</code></td><td>シナリオのプリセット (UI から保存・削除できます)</td></tr>
+    <tr><td><code>docker-compose.yml</code> の環境変数</td><td><code>WEB_PORT</code> (8080), <code>ROS_DOMAIN_ID</code> (87), <code>ROS_AUTOMATIC_DISCOVERY_RANGE</code> (LOCALHOST), <code>GZ_PARTITION</code>, <code>EVAL_LIDAR</code> (auto/gpu/virtual), <code>EVAL_BACKENDS</code></td></tr>
+  </table>
+</section>
+
+<!-- ============================================================== -->
+<section id="ros">
+  <h2>ROS インターフェース</h2>
+  <table>
+    <tr><th>名前</th><th>型</th><th>内容</th></tr>
+    <tr><td><code>/clock</code></td><td>rosgraph_msgs/Clock</td><td>Gazebo のシミュレーション時刻 (全ノード use_sim_time)</td></tr>
+    <tr><td><code>/cmd_vel</code></td><td>geometry_msgs/Twist</td><td>ロボットへの指令 (eval_server がゲートして送信) → DiffDrive</td></tr>
+    <tr><td><code>/controller/cmd_vel</code></td><td>geometry_msgs/Twist</td><td>制御器の出力</td></tr>
+    <tr><td><code>/ground_truth/odom</code></td><td>nav_msgs/Odometry</td><td>ロボットの真値 (pose: world, twist: 機体座標)</td></tr>
+    <tr><td><code>/odom</code></td><td>nav_msgs/Odometry</td><td>車輪オドメトリ (参考)</td></tr>
+    <tr><td><code>/scan</code> (<code>/scan_gz</code>)</td><td>sensor_msgs/LaserScan</td><td>LiDAR (frame: lidar_link)。<code>/scan_gz</code> は Gazebo の生出力</td></tr>
+    <tr><td><code>/humans/human_N/cmd_vel</code></td><td>geometry_msgs/Twist</td><td>人の速度指令 (機体座標) → VelocityControl</td></tr>
+    <tr><td><code>/humans/human_N/odom</code></td><td>nav_msgs/Odometry</td><td>人の真値</td></tr>
+    <tr><td><code>/world/eval_world/set_pose</code></td><td>ros_gz_interfaces/srv/SetEntityPose</td><td>試行開始時の再配置 (eval_robot, human_N, start_line, goal_line)</td></tr>
+    <tr><td><code>/local_planner/command</code> / <code>status</code> / <code>debug</code></td><td>std_msgs/String (JSON)</td><td>制御器の開始・停止 / 状態 / 予測軌道など</td></tr>
+    <tr><td><code>/local_planner/markers</code></td><td>visualization_msgs/MarkerArray</td><td>予測軌道 (RViz)</td></tr>
+    <tr><td><code>/eval/path</code>, <code>/eval/trial</code></td><td>nav_msgs/Path, std_msgs/String</td><td>今回の経路 / 試行情報 (transient local)</td></tr>
+    <tr><td><code>/tf</code></td><td>tf2_msgs/TFMessage</td><td>world → base_link (真値)。base_link → lidar_link は static</td></tr>
+  </table>
+</section>
+
+<!-- ============================================================== -->
+<section id="sim2d">
+  <h2>簡易2Dシミュレータ</h2>
+  <p>同じ試行管理・制御器・指標を、ROS 2 / Gazebo を使わない運動学シミュレータ (DiffDrive と同じ加減速制限、人の脚とレイキャストする 2D LiDAR) で実行できます。
+    UI のバックエンドで「簡易2Dシミュレータ」を選ぶと、最大速度なら 1 試行 1 秒程度で終わるので、自作制御器のデバッグやパラメータ探索に便利です。最終評価は Gazebo で行ってください。</p>
+<pre><code>./scripts/start.sh --2d-only</code></pre>
+  <p>Docker を使わずにホストで動かす場合 (Python 3.10 以上):</p>
+<pre><code>pip install numpy scipy matplotlib pyyaml "starlette==1.7.0" "uvicorn==0.54.0" plotly
+cd ros2_ws/src/eval_core
+python3 -m eval_core.app --backends sim2d</code></pre>
+</section>
+
+<!-- ============================================================== -->
+<section id="troubleshooting">
+  <h2>トラブルシューティング</h2>
+  <table>
+    <tr><th>症状</th><th>確認・対処</th></tr>
+    <tr><td>右上が「Gazebo: 未接続」のまま</td><td>起動直後は Gazebo の起動に数十秒かかります。<code>./scripts/logs.sh sim</code> でエラーを確認。<code>./scripts/diagnose.sh</code> で <code>/clock</code> や <code>/ground_truth/odom</code> のレートを確認。マウスを乗せると不足しているものが表示されます</td></tr>
+    <tr><td>ログに「VIRTUAL LiDAR」と出る</td><td>Gazebo の gpu_lidar が描画できていません (OpenGL/EGL)。NVIDIA GPU があれば <code>./scripts/start.sh --gpu</code>。仮想 LiDAR のままでも評価は可能です</td></tr>
+    <tr><td>実時間より遅い (Real Time Factor &lt; 1)</td><td>すべてシミュレーション時刻で計測するので結果には影響しませんが、試行に時間がかかります。<code>--gpu</code> の使用や、robot.yaml の LiDAR 点数を減らすと改善します</td></tr>
+    <tr><td>GUI が出ない</td><td><code>echo $DISPLAY</code> を確認し、<code>xhost +local:</code> を実行してから <code>./scripts/start.sh --gui</code>。Wayland の場合は XWayland が必要です</td></tr>
+    <tr><td>ホストから ros2 topic が見えない</td><td>既定で <code>ROS_DOMAIN_ID=87</code>・LOCALHOST 限定です。ホスト側も同じ値を設定するか、<code>./scripts/shell.sh</code> の中で確認してください</td></tr>
+    <tr><td>results/ のファイルを消せない</td><td>コンテナが root で書き込むためです。UI の「結果」タブの削除ボタンを使うか <code>sudo rm -r results/&lt;batch&gt;</code></td></tr>
+    <tr><td>ビルドで apt の署名エラー</td><td>ベースイメージが古い可能性があります。<code>./scripts/build.sh</code> は <code>--pull</code> で最新の <code>ros:jazzy-ros-base</code> を取得します。<code>./scripts/build.sh --no-cache</code> も試してください</td></tr>
+    <tr><td>ポート 8080 が使用中</td><td><code>./scripts/start.sh --port 8090</code></td></tr>
+  </table>
+</section>
+
+<!-- ============================================================== -->
+<section id="files">
+  <h2>ディレクトリ構成</h2>
+<pre><code>robot_evaluation_environment/
+├── docker/                  Dockerfile, entrypoint.sh
+├── docker-compose.yml       sim / eval / gui / rviz サービス
+├── docker-compose.gpu.yml   NVIDIA GPU 用オーバーライド
+├── scripts/                 build / start / stop / logs / shell / test / diagnose
+├── config/                  robot.yaml, world.yaml, scenarios/*.json
+├── custom_controllers/      自作制御器 (.py / .yaml) とサンプル
+├── results/                 評価結果 (自動生成, git 管理外)
+├── docs/index.html          このドキュメント
+└── ros2_ws/src/
+    ├── eval_core/           制御器・人の動き・試行管理・指標・Web UI・ROS ノード
+    │   ├── eval_core/controllers/   dwa, pure_pursuit (+dwpp), mpc, mppi, base
+    │   ├── eval_core/web/           Starlette サーバーと静的 UI
+    │   ├── eval_core/ros/           local_planner, gazebo_backend, scan_relay
+    │   ├── launch/eval.launch.py
+    │   └── test/                    pytest (fake rclpy による ROS 結合テストを含む)
+    └── eval_gazebo/         ワールド/モデル生成, ブリッジ設定, sim/bringup launch, RViz 設定</code></pre>
+</section>
+</main>
+</div>
+</body>
+</html>
