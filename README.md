@@ -8,7 +8,7 @@
 - 評価: 移動時間、人との最小距離・クリアランス、パーソナルスペース侵入時間、TTC、接触、滑らかさ、計算時間
 - Web UI: 評価の開始・停止、ライブビュー、結果一覧、複数試行の比較解析、グラフ (PNG)・CSV・HTML レポート出力
 
-**ドキュメント (構成図・実行方法・各設定の説明): [docs/index.html](docs/index.html)**
+**ドキュメント (構成図・実行方法・各設定の説明): https://mamoru1126.github.io/robot_evaluation_environment/** (ソース: [docs/index.html](docs/index.html))
 
 ## クイックスタート
 
